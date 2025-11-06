@@ -1,5 +1,7 @@
 import {
   CacheType,
+  ChatInputCommandInteraction,
+  DiscordAPIError,
   Events,
   Interaction,
   SharedSlashCommand,
@@ -65,46 +67,114 @@ export class TalkCommand extends CommandBase {
 
     const { commandName } = interaction;
     if (commandName === "talk") {
-      const topic = interaction.options.getString("お題", true);
-      const turns = interaction.options.getInteger("ターン数") || 3;
-      const taroPersonality = interaction.options.getString("太郎の性格");
-      const hanakoPersonality = interaction.options.getString("花子の性格");
+      const chatInteraction: ChatInputCommandInteraction = interaction;
+      const topic = chatInteraction.options.getString("お題", true);
+      const turns = chatInteraction.options.getInteger("ターン数") || 3;
+      const taroPersonality = chatInteraction.options.getString("太郎の性格");
+      const hanakoPersonality =
+        chatInteraction.options.getString("花子の性格");
 
-      // 新しい対話を開始
-      this.conversationHistory = {
-        topic,
-        messages: [],
-      };
+      try {
+        // 新しい対話を開始
+        this.conversationHistory = {
+          topic,
+          messages: [],
+        };
 
-      // 最初のメッセージを送信
-      await interaction.reply(`**お題: ${topic}**\n\n対話を開始します...`);
+        // 最初のメッセージを送信
+        await chatInteraction.reply({
+          content: `**お題: ${topic}**\n\n対話を開始します...`,
+        });
 
-      // メッセージ内容を保持する変数
-      let messageContent = `**お題: ${topic}**\n\n`;
+        // editReply で 10008 が発生した場合に利用するフォローアップメッセージの ID
+        let fallbackMessageId: string | null = null;
 
-      // 対話の進行
-      for (let i = 0; i < turns; i++) {
-        // 太郎の発言を生成
-        const taroMessage = await this.generateMessage("太郎", taroPersonality);
-        messageContent += `**太郎：** ${taroMessage}\n\n`;
+        const updateReply = async (content: string) => {
+          try {
+            if (fallbackMessageId) {
+              await chatInteraction.webhook.editMessage(fallbackMessageId, {
+                content,
+              });
+            } else {
+              await chatInteraction.editReply({ content });
+            }
+          } catch (error) {
+            if (
+              error instanceof DiscordAPIError &&
+              error.code === 10008
+            ) {
+              console.warn(
+                "[TalkCommand] Original reply was missing. Sending a follow-up message instead."
+              );
+              const followUpMessage = await chatInteraction.followUp({
+                content,
+              });
+              fallbackMessageId = followUpMessage.id;
+            } else {
+              throw error;
+            }
+          }
+        };
 
-        // メッセージを更新
-        await interaction.editReply(messageContent);
+        // メッセージ内容を保持する変数
+        let messageContent = `**お題: ${topic}**\n\n`;
 
-        // 花子の発言を生成
-        const hanakoMessage = await this.generateMessage(
-          "花子",
-          hanakoPersonality
-        );
-        messageContent += `**花子：** ${hanakoMessage}\n\n`;
+        // 対話の進行
+        for (let i = 0; i < turns; i++) {
+          // 太郎の発言を生成
+          const taroMessage = await this.generateMessage(
+            "太郎",
+            taroPersonality
+          );
+          messageContent += `**太郎：** ${taroMessage}\n\n`;
 
-        // メッセージを更新
-        await interaction.editReply(messageContent);
+          // メッセージを更新
+          await updateReply(messageContent);
+
+          // 花子の発言を生成
+          const hanakoMessage = await this.generateMessage(
+            "花子",
+            hanakoPersonality
+          );
+          messageContent += `**花子：** ${hanakoMessage}\n\n`;
+
+          // メッセージを更新
+          await updateReply(messageContent);
+        }
+
+        // 対話終了メッセージ
+        messageContent += "対話が終了しました。";
+        await updateReply(messageContent);
+      } catch (error) {
+        console.error("/talk コマンド実行中にエラーが発生しました:", error);
+        if (chatInteraction.deferred || chatInteraction.replied) {
+          await chatInteraction
+            .followUp({
+              content:
+                "会話の更新中にエラーが発生しました。もう一度お試しください。",
+              ephemeral: true,
+            })
+            .catch((followUpError) => {
+              console.error(
+                "/talk コマンドのエラーメッセージ送信に失敗しました:",
+                followUpError
+              );
+            });
+        } else {
+          await chatInteraction
+            .reply({
+              content:
+                "会話の開始中にエラーが発生しました。もう一度お試しください。",
+              ephemeral: true,
+            })
+            .catch((replyError) => {
+              console.error(
+                "/talk コマンドのエラーメッセージ返信に失敗しました:",
+                replyError
+              );
+            });
+        }
       }
-
-      // 対話終了メッセージ
-      messageContent += "対話が終了しました。";
-      await interaction.editReply(messageContent);
     }
   }
 

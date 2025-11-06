@@ -40,6 +40,9 @@ export class HannarikoBot {
     this.client.once(Events.ClientReady, async (readyClient) => {
       console.log(`Ready! Logged in as ${readyClient.user.tag}`);
     });
+    this.client.on(Events.Error, (error) => {
+      console.error("Discord client error:", error);
+    });
   }
 }
 
