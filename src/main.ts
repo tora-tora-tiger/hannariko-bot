@@ -9,6 +9,7 @@ import { CommandBase } from "./commands/command-base";
 import { DeprecatedCommand } from "./commands/deprecated";
 import { TwitterDuplicateDetector } from "./features/twitter-duplicate-detector";
 import { ThreeThreeFourGame } from "./features/three-three-four-game";
+import { DeathCounter } from "./features/death-counter";
 import { GeminiRateLimiter } from "./utils/gemini-rate-limiter";
 
 export class HannarikoBot {
@@ -69,6 +70,10 @@ async function main() {
   // 334ゲームの初期化
   const threeThreeFourGame = new ThreeThreeFourGame(bot);
   await threeThreeFourGame.initialize();
+
+  // 死ねカウンターの初期化
+  const deathCounter = new DeathCounter(bot);
+  await deathCounter.initialize();
 
   await bot.client.login(token);
 }
