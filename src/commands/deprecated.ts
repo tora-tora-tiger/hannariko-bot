@@ -61,15 +61,19 @@ export class DeprecatedCommand extends CommandBase {
         return;
       }
 
-      const lines = duplicates.map((entry, index) =>
-        `${index + 1}. <@${entry.user_id}> — ${entry.duplicate_count}回`
+      const lines = await Promise.all(
+        duplicates.map(async (entry, index) => {
+          const user = await this.bot.client.users.fetch(entry.user_id).catch(() => null);
+          const name = user?.displayName ?? "不明なユーザー";
+          return `${index + 1}. ${name} — ${entry.duplicate_count}回`;
+        })
       );
       const message = [
         "重複投稿の累計回数ランキング:",
         ...lines,
       ].join("\n");
 
-      await interaction.editReply({ content: message, allowedMentions: { users: [] } });
+      await interaction.editReply(message);
     } catch (error) {
       console.error("Failed to fetch duplicate stats:", error);
       await interaction.editReply("重複投稿の集計取得に失敗しました。");
