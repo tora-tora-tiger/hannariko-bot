@@ -69,7 +69,7 @@ export class DeprecatedCommand extends CommandBase {
         ...lines,
       ].join("\n");
 
-      await interaction.editReply(message);
+      await interaction.editReply({ content: message, allowedMentions: { users: [] } });
     } catch (error) {
       console.error("Failed to fetch duplicate stats:", error);
       await interaction.editReply("重複投稿の集計取得に失敗しました。");
