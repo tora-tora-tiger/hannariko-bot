@@ -31,16 +31,19 @@ export class TwitterDuplicateDetector {
     if (message.author.bot) return;
 
     try {
+      // Botをメンションしているかどうかを確認
+      const botMentioned = message.content.includes(this.bot.client.user?.id);
+
       // メッセージからツイートIDを抽出
       const tweetIds = TwitterParser.extractAllTweetIds(message.content);
 
       for (const tweetId of tweetIds) {
-        await this.checkDuplicate(tweetId, message);
+        await this.checkDuplicate(tweetId, message, botMentioned);
       }
     } catch (error) {
       console.error(
         "Error handling message for Twitter duplicate check:",
-        error
+        error,
       );
       // エラーが発生しても処理を継続
     }
@@ -48,17 +51,23 @@ export class TwitterDuplicateDetector {
 
   private async checkDuplicate(
     tweetId: string,
-    message: Message
+    message: Message,
+    botMentioned: boolean,
   ): Promise<void> {
     try {
       // データベースで重複確認
       const existingLink = await this.database.findByTweetId(tweetId);
 
       if (existingLink) {
+        if (botMentioned) {
+          // dep ignore
+          return;
+        }
+
         // 重複の場合
         await this.database.incrementPostCount(tweetId);
         const duplicateCount = await this.database.incrementUserDuplicateCount(
-          message.author.id
+          message.author.id,
         );
 
         // 元のメッセージリンクを生成
@@ -77,6 +86,13 @@ export class TwitterDuplicateDetector {
         // 警告メッセージを送信
         await message.reply(warningMessage);
       } else {
+        if (!existingLink && botMentioned) {
+          // dep ignore
+          const warningMessage =
+            "⚠️ undeprecated! このリンクはdepでないのにもかかわらず、Dep Ignoreされました。";
+          await message.reply(warningMessage);
+        }
+
         // 新規の場合はデータベースに記録
         await this.database.insert({
           tweet_id: tweetId,
